@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.js"></script>
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Segoe UI',sans-serif;background:#111b21;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+        /* topbar */
+        .topbar{background:#202c33;color:#e9edef;padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;flex-shrink:0}
+        .topbar .brand{font-size:1.1rem;font-weight:700;color:#00a884}
+        .topbar a{color:#aebac1;text-decoration:none;font-size:.85rem}
+        .topbar a:hover{color:#e9edef}
+        .topbar .me{font-size:.85rem;color:#aebac1}
+
+        /* layout */
+        .chat-layout{display:flex;flex:1;overflow:hidden}
+
+        /* sidebar */
+        .sidebar{width:340px;background:#111b21;border-right:1px solid #2a3942;display:flex;flex-direction:column;flex-shrink:0}
+        .sidebar-header{background:#202c33;padding:14px 16px;color:#e9edef;font-weight:600;font-size:.95rem;border-bottom:1px solid #2a3942}
+        .search-wrap{padding:8px 12px;background:#111b21;border-bottom:1px solid #2a3942}
+        .search-wrap input{width:100%;background:#202c33;border:none;border-radius:8px;padding:8px 14px;color:#e9edef;font-size:.87rem;outline:none}
+        .search-wrap input::placeholder{color:#8696a0}
+        .user-list{overflow-y:auto;flex:1}
+        .user-item{display:flex;align-items:center;padding:12px 16px;cursor:pointer;border-bottom:1px solid #1f2c33;transition:background .15s}
+        .user-item:hover{background:#202c33}
+        .user-item.active{background:#2a3942}
+        .avatar{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;flex-shrink:0;margin-right:12px;text-transform:uppercase;color:#fff}
+        .c0{background:#00a884}.c1{background:#7c4dff}.c2{background:#1976d2}.c3{background:#f57c00}.c4{background:#e91e63}
+        .uinfo{flex:1;min-width:0}
+        .uname{color:#e9edef;font-size:.93rem;font-weight:500}
+        .uprev{color:#8696a0;font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+        .ubadge{background:#00a884;color:#fff;border-radius:50%;min-width:20px;height:20px;font-size:.7rem;display:none;align-items:center;justify-content:center;padding:0 4px}
+
+        /* chat panel */
+        .chat-panel{flex:1;display:flex;flex-direction:column;background:#0b141a;position:relative;overflow:hidden}
+        .chat-panel::before{content:'';position:absolute;inset:0;opacity:.06;background-image:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E");pointer-events:none;z-index:0}
+        .chat-panel>*{position:relative;z-index:1}
+
+        /* empty */
+        .empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#8696a0;text-align:center;padding:40px}
+        .empty-state .icon{font-size:4rem;margin-bottom:16px;opacity:.4}
+        .empty-state h4{color:#e9edef;margin-bottom:8px}
+
+        /* chat header */
+        .chat-header{background:#202c33;padding:10px 16px;display:none;align-items:center;border-bottom:1px solid #2a3942;flex-shrink:0}
+        .chat-header .avatar{width:40px;height:40px;font-size:1rem;margin-right:12px}
+        .chat-with{color:#e9edef;font-size:.95rem;font-weight:600}
+
+        /* messages */
+        .messages-area{flex:1;overflow-y:auto;padding:12px 60px;display:none;flex-direction:column;gap:2px}
+        .date-div{text-align:center;margin:10px 0}
+        .date-div span{background:#182229;color:#8696a0;font-size:.73rem;padding:4px 12px;border-radius:8px}
+
+        /* bubble row */
+        .msg-row{display:flex;flex-direction:column;max-width:62%;position:relative}
+        .msg-row.sent{align-self:flex-end;align-items:flex-end}
+        .msg-row.received{align-self:flex-start;align-items:flex-start}
+
+        .bubble{padding:7px 12px 4px;border-radius:8px;font-size:.9rem;line-height:1.45;word-break:break-word;position:relative}
+        .bubble.sent{background:#005c4b;color:#e9edef;border-bottom-right-radius:2px}
+        .bubble.received{background:#202c33;color:#e9edef;border-bottom-left-radius:2px}
+        .bubble.deleted-msg{color:#8696a0!important;font-style:italic}
+
+        .bubble-footer{display:flex;align-items:center;gap:4px;margin-top:2px;justify-content:flex-end}
+        .btime{font-size:.67rem;color:#8696a0}
+        .edited-tag{font-size:.65rem;color:#8696a0}
+
+        /* context menu */
+        .ctx-menu{position:fixed;background:#233138;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.5);z-index:9999;min-width:150px;overflow:hidden;display:none}
+        .ctx-item{padding:12px 18px;color:#e9edef;font-size:.88rem;cursor:pointer;transition:background .15s}
+        .ctx-item:hover{background:#2a3942}
+        .ctx-item.danger{color:#f15c6d}
+        .ctx-item.danger:hover{background:#3a2229}
+
+        /* edit modal */
+        .edit-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9998;display:none;align-items:center;justify-content:center}
+        .edit-box{background:#233138;border-radius:12px;padding:24px;width:420px;max-width:90vw}
+        .edit-box h6{color:#e9edef;margin-bottom:14px;font-size:1rem}
+        .edit-box textarea{width:100%;background:#2a3942;border:none;border-radius:8px;padding:10px 14px;color:#e9edef;font-size:.9rem;resize:none;outline:none;min-height:80px}
+        .edit-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+        .btn-cancel-edit{background:transparent;border:1px solid #8696a0;color:#8696a0;border-radius:8px;padding:7px 18px;cursor:pointer;font-size:.85rem}
+        .btn-save-edit{background:#00a884;border:none;color:#fff;border-radius:8px;padding:7px 18px;cursor:pointer;font-size:.85rem}
+
+        /* input bar */
+        .input-bar{background:#202c33;padding:10px 16px;display:none;align-items:center;gap:10px;border-top:1px solid #2a3942;flex-shrink:0}
+        .input-bar input{flex:1;background:#2a3942;border:none;border-radius:24px;padding:10px 18px;color:#e9edef;font-size:.92rem;outline:none}
+        .input-bar input::placeholder{color:#8696a0}
+        .btn-send-msg{background:#00a884;border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:background .2s}
+        .btn-send-msg:hover{background:#017561}
+        .btn-send-msg svg{fill:#fff;width:20px;height:20px}
+
+        ::-webkit-scrollbar{width:5px}
+        ::-webkit-scrollbar-thumb{background:#374045;border-radius:3px}
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <span class="brand">💬 ChatApp</span>
+    <div class="d-flex align-items-center gap-3">
+        <span class="me">Logged in as <strong style="color:#e9edef">{{ current_user.username }}</strong></span>
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
+</div>
+
+<div class="chat-layout">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">Chats</div>
+        <div class="search-wrap">
+            <input type="text" id="searchInput" placeholder="Search users…">
+        </div>
+        <div class="user-list" id="userList">
+            {% for user in users %}
+            {% set colors = ['c0','c1','c2','c3','c4'] %}
+            <div class="user-item" data-id="{{ user.id }}" data-name="{{ user.username }}"
+                 onclick="openChat({{ user.id }}, '{{ user.username }}', '{{ colors[loop.index0 % 5] }}')">
+                <div class="avatar {{ colors[loop.index0 % 5] }}">{{ user.username[0] }}</div>
+                <div class="uinfo">
+                    <div class="uname">{{ user.username }}</div>
+                    <div class="uprev" id="prev-{{ user.id }}">Tap to chat</div>
+                </div>
+                <div class="ubadge" id="badge-{{ user.id }}"></div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Chat panel -->
+    <div class="chat-panel" id="chatPanel">
+        <div class="empty-state" id="emptyState">
+            <div class="icon">💬</div>
+            <h4>Select a chat</h4>
+            <p>Choose someone from the left to start messaging.</p>
+        </div>
+
+        <div class="chat-header" id="chatHeader">
+            <div class="avatar c0" id="hdrAvatar">?</div>
+            <div class="chat-with" id="chatWith">–</div>
+        </div>
+
+        <div class="messages-area" id="messagesArea"></div>
+
+        <div class="input-bar" id="inputBar">
+            <input type="text" id="msgInput" placeholder="Type a message">
+            <button class="btn-send-msg" id="sendBtn">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Context menu -->
+<div class="ctx-menu" id="ctxMenu">
+    <div class="ctx-item" id="ctxEdit">✏️ Edit</div>
+    <div class="ctx-item danger" id="ctxDelete">🗑️ Delete</div>
+</div>
+
+<!-- Edit modal -->
+<div class="edit-overlay" id="editOverlay">
+    <div class="edit-box">
+        <h6>Edit Message</h6>
+        <textarea id="editText"></textarea>
+        <div class="edit-actions">
+            <button class="btn-cancel-edit" id="cancelEdit">Cancel</button>
+            <button class="btn-save-edit" id="saveEdit">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+var ME_ID        = {{ current_user.id }};
+var ME_NAME      = "{{ current_user.username }}";
+var activeOther  = null;   // { id, name }
+var unread       = {};
+var ctxMsgId     = null;
+var editMsgId    = null;
+
+var socket = io();
+
+socket.on('connect', function(){ console.log('socket connected'); });
+
+// ── History ───────────────────────────────────────────────────────────────────
+socket.on('chat_history', function(data){
+    $('#messagesArea').empty();
+    if(data.history.length === 0){
+        $('#messagesArea').append('<div class="date-div"><span>No messages yet — say hello!</span></div>');
+    } else {
+        $('#messagesArea').append('<div class="date-div"><span>— Chat history —</span></div>');
+        data.history.forEach(function(m){ renderBubble(m); });
+    }
+    scrollBottom();
+});
+
+// ── New message ───────────────────────────────────────────────────────────────
+socket.on('new_message', function(data){
+    var fromMe   = (data.sender_id === ME_ID);
+    var otherId  = fromMe ? data.receiver_id : data.sender_id;
+
+    if(activeOther && activeOther.id === otherId){
+        renderBubble(data);
+        scrollBottom();
+        setPreview(otherId, data.content);
+    } else if(!fromMe){
+        setPreview(otherId, data.content);
+        addUnread(otherId);
+    }
+});
+
+// ── Edit ──────────────────────────────────────────────────────────────────────
+socket.on('message_edited', function(data){
+    var row = $('#msg-' + data.msg_id);
+    row.find('.bubble-text').text(data.content);
+    row.find('.edited-tag').show();
+    row.attr('data-content', data.content);
+});
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+socket.on('message_deleted', function(data){
+    var row = $('#msg-' + data.msg_id);
+    row.find('.bubble').addClass('deleted-msg');
+    row.find('.bubble-text').text('🚫 This message was deleted');
+    row.find('.edited-tag').hide();
+    row.addClass('is-deleted');
+});
+
+// ── Open chat ─────────────────────────────────────────────────────────────────
+function openChat(id, name, colorCls){
+    activeOther = { id: id, name: name };
+    clearUnread(id);
+
+    $('.user-item').removeClass('active');
+    $('.user-item[data-id="'+id+'"]').addClass('active');
+
+    $('#emptyState').hide();
+    $('#chatHeader').css('display','flex');
+    $('#messagesArea').css('display','flex');
+    $('#inputBar').css('display','flex');
+
+    $('#chatWith').text(name);
+    $('#hdrAvatar').text(name[0].toUpperCase()).attr('class','avatar '+(colorCls||'c0'));
+
+    socket.emit('join_chat', { other_id: id });
+    $('#msgInput').focus();
+}
+
+// ── Send ──────────────────────────────────────────────────────────────────────
+function sendMessage(){
+    if(!activeOther) return;
+    var txt = $('#msgInput').val().trim();
+    if(!txt) return;
+    socket.emit('private_message', { receiver_id: activeOther.id, content: txt });
+    $('#msgInput').val('');
+}
+$('#sendBtn').on('click', sendMessage);
+$('#msgInput').on('keypress', function(e){ if(e.which===13) sendMessage(); });
+
+// ── Render bubble ─────────────────────────────────────────────────────────────
+function renderBubble(m){
+    var isMe     = (m.sender_id === ME_ID);
+    var rowCls   = isMe ? 'sent' : 'received';
+    var bubCls   = isMe ? 'sent' : 'received';
+    var isDeleted= m.deleted;
+    var displayTxt = isDeleted ? '🚫 This message was deleted' : m.content;
+
+    var row = $('<div>')
+        .addClass('msg-row ' + rowCls)
+        .attr('id', 'msg-' + m.id)
+        .attr('data-id', m.id)
+        .attr('data-content', m.content)
+        .toggleClass('is-deleted', isDeleted);
+
+    var bub = $('<div>').addClass('bubble ' + bubCls + (isDeleted?' deleted-msg':''));
+    var txt = $('<span>').addClass('bubble-text').text(displayTxt);
+    bub.append(txt);
+
+    var footer = $('<div>').addClass('bubble-footer');
+    if(m.edited && !isDeleted){
+        footer.append($('<span>').addClass('edited-tag').text('edited'));
+    }
+    footer.append($('<span>').addClass('btime').text(m.timestamp));
+    bub.append(footer);
+    row.append(bub);
+
+    // Right-click / long-press context menu (only own non-deleted messages)
+    if(isMe && !isDeleted){
+        row.on('contextmenu', function(e){
+            e.preventDefault();
+            showCtxMenu(e.pageX, e.pageY, m.id);
+        });
+        // touch long press
+        var pressTimer;
+        row.on('touchstart', function(e){
+            pressTimer = setTimeout(function(){
+                var t = e.originalEvent.touches[0];
+                showCtxMenu(t.pageX, t.pageY, m.id);
+            }, 600);
+        }).on('touchend touchmove', function(){ clearTimeout(pressTimer); });
+    }
+
+    $('#messagesArea').append(row);
+}
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+function showCtxMenu(x, y, msgId){
+    ctxMsgId = msgId;
+    var menu = $('#ctxMenu');
+    menu.css({ top: y, left: x, display: 'block' });
+
+    // Adjust if off-screen
+    var mw = menu.outerWidth(), mh = menu.outerHeight();
+    if(x + mw > $(window).width())  menu.css('left', x - mw);
+    if(y + mh > $(window).height()) menu.css('top',  y - mh);
+}
+
+function hideCtxMenu(){ $('#ctxMenu').hide(); ctxMsgId = null; }
+
+$(document).on('click', function(){ hideCtxMenu(); });
+$(document).on('keydown', function(e){ if(e.key==='Escape'){ hideCtxMenu(); closeEditModal(); } });
+
+$('#ctxEdit').on('click', function(){
+    if(!ctxMsgId) return;
+    var row = $('#msg-' + ctxMsgId);
+    if(row.hasClass('is-deleted')) return;
+    editMsgId = ctxMsgId;
+    $('#editText').val(row.attr('data-content'));
+    $('#editOverlay').css('display','flex');
+    $('#editText').focus();
+    hideCtxMenu();
+});
+
+$('#ctxDelete').on('click', function(){
+    if(!ctxMsgId) return;
+    socket.emit('delete_message', { msg_id: ctxMsgId });
+    hideCtxMenu();
+});
+
+// ── Edit modal ────────────────────────────────────────────────────────────────
+function closeEditModal(){ $('#editOverlay').hide(); editMsgId = null; }
+
+$('#cancelEdit').on('click', closeEditModal);
+$('#editOverlay').on('click', function(e){ if($(e.target).is('#editOverlay')) closeEditModal(); });
+
+$('#saveEdit').on('click', function(){
+    var txt = $('#editText').val().trim();
+    if(!txt || !editMsgId) return;
+    socket.emit('edit_message', { msg_id: editMsgId, content: txt });
+    closeEditModal();
+});
+$('#editText').on('keydown', function(e){
+    if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $('#saveEdit').click(); }
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function scrollBottom(){
+    var el = document.getElementById('messagesArea');
+    el.scrollTop = el.scrollHeight;
+}
+function setPreview(uid, txt){
+    $('#prev-'+uid).text(txt.length>36 ? txt.substring(0,36)+'…' : txt);
+}
+function addUnread(uid){
+    unread[uid] = (unread[uid]||0) + 1;
+    $('#badge-'+uid).text(unread[uid]).css('display','flex');
+}
+function clearUnread(uid){
+    unread[uid] = 0;
+    $('#badge-'+uid).hide();
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+$('#searchInput').on('input', function(){
+    var q = $(this).val().toLowerCase();
+    $('.user-item').each(function(){
+        $(this).toggle($(this).data('name').toLowerCase().includes(q));
+    });
+});
+</script>
+</body>
+</html>
