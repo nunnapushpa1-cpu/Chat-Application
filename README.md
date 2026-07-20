@@ -87,7 +87,7 @@ http://127.0.0.1:5001
 
 # 📷 Application Screenshot
 
-![Chat Application](App.png)
+![Chat Application](screenshots/App.png)
 
 ---
 
