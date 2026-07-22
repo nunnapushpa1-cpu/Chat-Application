@@ -37,6 +37,7 @@ class PrivateMessage(db.Model):
     timestamp   = db.Column(db.DateTime, default=datetime.utcnow)
     edited      = db.Column(db.Boolean, default=False)
     deleted     = db.Column(db.Boolean, default=False)
+    seen        = db.Column(db.Boolean, default=False)
 
     sender   = db.relationship('User', foreign_keys=[sender_id])
     receiver = db.relationship('User', foreign_keys=[receiver_id])
@@ -128,6 +129,42 @@ def handle_private_message(data):
         'edited':      False,
         'deleted':     False,
     }, room=room)
+
+
+
+@socketio.on("typing")
+def handle_typing(data):
+
+    receiver_id = int(data["receiver_id"])
+
+    room = private_room(current_user.id, receiver_id)
+
+    emit(
+        "user_typing",
+        {
+            "user_id": current_user.id,
+            "username": current_user.username
+        },
+        room=room,
+        include_self=False
+    )
+
+
+@socketio.on("stop_typing")
+def handle_stop_typing(data):
+
+    receiver_id = int(data["receiver_id"])
+
+    room = private_room(current_user.id, receiver_id)
+
+    emit(
+        "user_stop_typing",
+        {
+            "user_id": current_user.id
+        },
+        room=room,
+        include_self=False
+    )
 
 @socketio.on('edit_message')
 def handle_edit_message(data):

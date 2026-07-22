@@ -143,9 +143,20 @@
         </div>
 
         <div class="chat-header" id="chatHeader">
-            <div class="avatar c0" id="hdrAvatar">?</div>
-            <div class="chat-with" id="chatWith">–</div>
+    <div class="avatar c0" id="hdrAvatar">?</div>
+
+    <div>
+        <div class="chat-with" id="chatWith">-</div>
+        <div id="typingStatus"
+             style="font-size:12px;color:#00d26a;display:none;">
+            typing...
         </div>
+    </div>
+</div>
+
+<div id="typingIndicator"
+     style="display:none;padding:6px 18px;color:#00a884;font-size:13px;">
+</div>
 
         <div class="messages-area" id="messagesArea"></div>
 
@@ -183,8 +194,9 @@ var activeOther  = null;   // { id, name }
 var unread       = {};
 var ctxMsgId     = null;
 var editMsgId    = null;
-
-var socket = io();
+var typingTimer  = null;
+var isTyping     = false;
+var socket       = io();
 
 socket.on('connect', function(){ console.log('socket connected'); });
 
@@ -215,6 +227,25 @@ socket.on('new_message', function(data){
     }
 });
 
+$('#msgInput').on('input', function(){
+
+    if(!activeOther) return;
+
+    socket.emit('typing', {
+        receiver_id: activeOther.id
+    });
+
+    clearTimeout(typingTimer);
+
+    typingTimer = setTimeout(function(){
+        socket.emit('stop_typing', {
+            receiver_id: activeOther.id
+        });
+    }, 1000);
+
+});
+
+
 // ── Edit ──────────────────────────────────────────────────────────────────────
 socket.on('message_edited', function(data){
     var row = $('#msg-' + data.msg_id);
@@ -230,6 +261,24 @@ socket.on('message_deleted', function(data){
     row.find('.bubble-text').text('🚫 This message was deleted');
     row.find('.edited-tag').hide();
     row.addClass('is-deleted');
+});
+
+socket.on("user_typing", function(data){
+
+    if(activeOther && Number(activeOther.id) === Number(data.user_id)){
+        $("#typingIndicator")
+            .text(data.username + " is typing...")
+            .show();
+    }
+
+});
+
+socket.on("user_stop_typing", function(data){
+
+    if(activeOther && Number(activeOther.id) === Number(data.user_id)){
+        $("#typingIndicator").hide();
+    }
+
 });
 
 // ── Open chat ─────────────────────────────────────────────────────────────────
@@ -258,6 +307,9 @@ function sendMessage(){
     var txt = $('#msgInput').val().trim();
     if(!txt) return;
     socket.emit('private_message', { receiver_id: activeOther.id, content: txt });
+    socket.emit("stop_typing", {
+    receiver_id: activeOther.id
+});
     $('#msgInput').val('');
 }
 $('#sendBtn').on('click', sendMessage);
